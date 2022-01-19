@@ -1,6 +1,7 @@
 #pragma once
 
-void sift_test();
-void tracking_test();
-void humandetect_test();
+// void sift_test(vector<Mat> frame);
+// void tracking_person(vector<Rect> cropped_coord, Mat& new_frame);
+void humandetect();
 void sift_img_test();
+void HumanDetectAndCrop();
