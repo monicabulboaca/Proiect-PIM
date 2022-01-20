@@ -17,134 +17,6 @@
 using namespace cv;
 using namespace std;
 
-vector<Ptr<Tracker>> trackers;
-Mat tracking_person(vector<Rect> &cropped_coord, Mat frame, vector<Mat> &imagesToCompareWith, bool init)
-{
-
-	// imshow("Tracking", frame);
-	Rect bbox;
-
-	// bbox = selectROI(frame, false);
-
-	bool ok;
-	// rectangle(frame, bbox, Scalar(255, 0, 0), 2, 1);	// Display bounding box. 
-	if (init)
-	{
-		trackers.push_back(TrackerCSRT::create());
-		bbox = cropped_coord.back();
-		trackers.back()->init(frame, bbox);
-	}
-	else
-	{
-		int n = trackers.size();
-		for (int i = 0; i < n; i++)
-		{
-			ok = trackers[i]->update(frame, cropped_coord[i]);
-			bbox = cropped_coord[i];
-			if (ok)
-			{
-				imagesToCompareWith.push_back(frame(Range(bbox.tl().y, bbox.br().y), Range(bbox.tl().x, bbox.br().x)));
-				rectangle(frame, bbox, Scalar(255, 0, 0), 2, 1);
-			}
-		}
-	}
-
-	return frame;
-}
-
-bool compareImages(Mat img1, Mat img2)
-{
-	Mat out1, out2;
-	vector<KeyPoint> keypoints1;
-	vector<KeyPoint> keypoints2;
-	vector< vector<DMatch> > nn_matches;
-
-	Ptr<SIFT>msr = SIFT::create();
-	//Ptr<AKAZE>akz = AKAZE::create();
-
-	if (img1.cols < 100)
-	{
-		resize(img1, img1, Size(img1.cols * 2, img1.rows * 2));
-	}
-
-	if (img2.cols < 100)
-	{
-		resize(img2, img2, Size(img2.cols * 2, img2.rows * 2));
-	}
-
-	//Ptr<AgastFeatureDetector> afp;
-	//Ptr<GFTTDetector> gfd;
-	//gfd = GFTTDetector::create();
-	//afp = AgastFeatureDetector::create();
-
-	//fp = FastFeatureDetector::create();
-	//afd = AffineFeatureDetector::create(fp);
-	//ade = AffineDescriptorExtractor::create(fp);
-	//afp->detectAndCompute(img1, noArray(), keypoints1, out1);
-	//afp->detectAndCompute(img2, noArray(), keypoints2, out2);
-
-	msr->detect(img1, keypoints1);
-	msr->detect(img2, keypoints2);
-	msr->compute(img1, keypoints1, out1);
-	msr->compute(img2, keypoints2, out2);
-
-	//afp->detect(img1,keypoints1);
-	//afp->detect(img2,keypoints2);
-
-	//afp->compute(img1, keypoints1, out1);
-	//afp->compute(img2, keypoints2, out2);
-
-
-
-	//fp->compute(img1, keypoints1, out1);
-	//fp->compute(img2, keypoints2, out2);
-	if (!out1.empty() && !out2.empty())
-	{
-		std::vector<DMatch> good_matches;
-		//Ptr<BFMatcher> bf = BFMatcher::create(NORM_L2);
-		BFMatcher bf;
-		bf.knnMatch(out1, out2, nn_matches, 2);
-		//bf.match(out1, out2, good_matches);
-
-		//-- Filter matches using the Lowe's ratio test
-		const float ratio_thresh = 0.7f;
-
-		if (!nn_matches.empty())
-		{
-			for (size_t i = 0; i < nn_matches.size(); i++)
-			{
-				//if (nn_matches[i].size() == 2)
-				//{
-				if (nn_matches[i][0].distance < ratio_thresh * nn_matches[i][1].distance)
-				{
-					good_matches.push_back(nn_matches[i][0]);
-				}
-				//}
-			}
-		}
-
-
-		// Mat im3;
-		// drawMatches(img1, keypoints1, img2, keypoints2, good_matches, im3, -1, -1, vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
-		// drawKeypoints(img1, keypoints1, img1);
-		// drawKeypoints(img2, keypoints2, img2);
-		// imshow("im1", img1);
-		// imshow("im2", img2);
-		// imshow("im3", im3);
-		// imwrite("imaginematch.jpg", im3);
-		// waitKey(0);
-		if (!good_matches.empty())
-		{
-			return true;
-		}
-		else return false;
-	}
-	else
-	{
-		return false;
-	}
-
-}
 
 // bool sift_test(vector<Mat> frames, Mat frame_test)
 // {
@@ -183,6 +55,9 @@ bool compareImages(Mat img1, Mat img2)
 // 	}
 
 // }
+
+//https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/?_ga=2.230718431.1917472254.1638901971-814175245.1636552974
+
 
 class Detector
 {
@@ -224,150 +99,25 @@ public:
 };
 
 
-//https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/?_ga=2.230718431.1917472254.1638901971-814175245.1636552974
-
-inline void nms(const vector<cv::Rect>& srcRects, vector<cv::Rect>& resRects, float thresh, int neighbors = 0)
-{
-	resRects.clear();
-
-	const size_t size = srcRects.size();
-	if (!size)
-		return;
-
-	// Sort the bounding boxes by the bottom - right y - coordinate of the bounding box
-	multimap<int, size_t> idxs;
-	for (size_t i = 0; i < size; ++i)
-	{
-		idxs.emplace(srcRects[i].br().y, i);
-	}
-
-	// keep looping while some indexes still remain in the indexes list
-	while (idxs.size() > 0)
-	{
-		// grab the last rectangle
-		auto lastElem = --end(idxs);
-		const cv::Rect& rect1 = srcRects[lastElem->second];
-
-		int neigborsCount = 0;
-
-		idxs.erase(lastElem);
-
-		for (auto pos = std::begin(idxs); pos != end(idxs); )
-		{
-			// grab the current rectangle
-			const cv::Rect& rect2 = srcRects[pos->second];
-
-			float intArea = static_cast<float>((rect1 & rect2).area());
-			float unionArea = rect1.area() + rect2.area() - intArea;
-			float overlap = intArea / unionArea;
-
-			// if there is sufficient overlap, suppress the current bounding box
-			if (overlap > thresh)
-			{
-				pos = idxs.erase(pos);
-				++neigborsCount;
-			}
-			else
-			{
-				++pos;
-			}
-		}
-		if (neigborsCount >= neighbors)
-			resRects.push_back(rect1);
-	}
-}
-
-bool compareImagesVector(vector<Mat> imagesToCompareWith, Mat image)
-{
-	int n = imagesToCompareWith.size();
-	int i;
-	if (imagesToCompareWith.empty())
-	{
-		return false;
-	}
-	else
-	{
-		for (i = 0; i < n; i++)
-		{
-			if (compareImages(imagesToCompareWith.at(i), image))
-				break;
-		}
-		if (i == n)
-			return false;
-		return true;
-	}
-}
-
-bool personAlreadyTracking(vector<Rect> crop_coord, Rect cropped_image_coords)
-{
-	int n = crop_coord.size();
-	for (int i = 0; i < n; i++)
-	{
-		if (crop_coord[i].contains(cropped_image_coords.tl()) ||
-			crop_coord[i].contains(cropped_image_coords.br()) ||
-			cropped_image_coords.contains(crop_coord[i].tl()) ||
-			cropped_image_coords.contains(crop_coord[i].br()) ||
-			Rect(cropped_image_coords.tl().x - 15, cropped_image_coords.tl().y - 15, cropped_image_coords.br().x - cropped_image_coords.tl().x + 10, cropped_image_coords.br().y - cropped_image_coords.tl().y + 10).contains(crop_coord[i].tl()) ||
-			Rect(cropped_image_coords.tl().x - 15, cropped_image_coords.tl().y - 15, cropped_image_coords.br().x - cropped_image_coords.tl().x + 10, cropped_image_coords.br().y - cropped_image_coords.tl().y + 10).contains(crop_coord[i].br()) ||
-			Rect(crop_coord[i].tl().x - 15, crop_coord[i].tl().y - 15, crop_coord[i].br().x - crop_coord[i].tl().x + 10, crop_coord[i].br().y - crop_coord[i].tl().y + 10).contains(cropped_image_coords.tl()) ||
-			Rect(crop_coord[i].tl().x - 15, crop_coord[i].tl().y - 15, crop_coord[i].br().x - crop_coord[i].tl().x + 10, crop_coord[i].br().y - crop_coord[i].tl().y + 10).contains(cropped_image_coords.br())
-			)
-			return true;
-	}
-	return false;
-}
-
-Scalar COLORS[] = { Scalar(60,60,60),Scalar(0,128,128),Scalar(145,25,60),Scalar(19,255,255) };
-vector<Point> circlesToDraw;
-vector<Scalar> coloursToDraw;
-Mat drawTrajectory(Mat frame, vector<Rect> coords)
-{
-	int n = coords.size();
-	int centerX, centerY;
-	Mat newFrame = frame.clone();
-	for (int i = 0; i < n; i++)
-	{
-		centerX = coords[i].tl().x +( coords[i].br().x - coords[i].tl().x)/2;
-		centerY = coords[i].tl().y +( coords[i].br().y - coords[i].tl().y)/2;
-		coloursToDraw.push_back(COLORS[i]);
-		circlesToDraw.push_back(Point(centerX, centerY));
-	}
-	n = circlesToDraw.size();
-	for (int i = 0; i < n; i++)
-	{
-		circle(newFrame, circlesToDraw[i], 4, coloursToDraw[i],FILLED);
-	}
-	return newFrame;
-}
-
-void humandetect()
+void humandetect(const char* path,const char* outFileName)
 {
 	Detector detector;
 	Mat draw;
 
 	int k = 0;
-	char c[FILENAME_MAX], path[FILENAME_MAX], path_out[FILENAME_MAX], path_crop_img[FILENAME_MAX];
-	char img_detected[FILENAME_MAX], img_circles[FILENAME_MAX], img_cropped[FILENAME_MAX];
-	bool gray_img = true;
-
-	_getcwd(path, FILENAME_MAX - 1);
-
-	strcpy_s(path_out, path);
-	strcpy_s(path_crop_img, path);
-
-	strcat_s(path_out, "\\test2");
-	strcat_s(path_crop_img, "\\cropped_img");
-
 	// Read video
-	VideoCapture video("datasets/OneLeaveShopReenter1cor.mpg");
-
+	//VideoCapture video("datasets/OneLeaveShopReenter1cor.mpg");
+	//VideoCapture video("datasets/TwoLeaveShop2cor.mpg");
+	//VideoCapture video("datasets/ThreePastShop2cor.mpg");
+	//VideoCapture video("datasets/WalkByShop1cor.mpg");
+	VideoCapture video(path);
+	
 	// Exit if video is not opened
 	if (!video.isOpened())
 	{
 		cout << "Could not read video file" << endl;
 		return;
 	}
-
 	// vector cu imaginile decupate
 	vector<Mat> crop;
 	Mat frame;
@@ -375,12 +125,13 @@ void humandetect()
 	vector<Rect> crop_coord;
 	vector<Mat> imagesOfTracking;
 	VideoWriter outputVideo;
+	Mat frameOriginal;
 	int codec = VideoWriter::fourcc('M', 'J', 'P', 'G');
 	for (k = 0; k < 90; k++)
 	{
 		video.read(frame);
 	}
-	outputVideo.open("outputtest.avi", codec, 25, frame.size(),frame.type());
+	outputVideo.open("WalkByShop1corOutput.avi", codec, 25, frame.size(),frame.type());
 	if (!outputVideo.isOpened()) {
 		cerr << "Could not open the output video file for write\n";
 		return;
@@ -390,16 +141,19 @@ void humandetect()
 		k += 1;
 
 		// frame = imread(c, IMREAD_GRAYSCALE);
-
 		video.read(frame);
-		// cvtColor(frame, frame, COLOR_BGR2GRAY);
+		//applyColorMap(frame, frame, COLORMAP_HSV);
+		//threshold(frame, frame, 0, 255, THRESH_BINARY + THRESH_OTSU);
+		//cvtColor(frame, frame, COLOR_RGB2GRAY);
+		//equalizeHist(frame, frame);
 		if (frame.empty())
 		{
 			cout << "Finished reading: empty frame" << endl;
 			break;
 		}
+		frameOriginal = frame.clone();
+		convertScaleAbs(frame, frame, 1.3, -50);
 		Mat cropped_image(frame.size(), CV_8UC4, Scalar(0, 0, 0, 0));
-		Mat draw(frame.size(), CV_8UC4, Scalar(0, 0, 0, 0));
 		int64 t = getTickCount();
 		Mat updatedFrame;
 		{
@@ -414,7 +168,7 @@ void humandetect()
 			if (!found2.empty())
 			{
 				vector<Rect> found(found2.capacity() + 1);
-				nms(found2, found, 0.3);	// aplicare non maximum suppression
+				nms(found2, found, (float)0.3,0);	// aplicare non maximum suppression
 				for (vector<Rect>::iterator i = found.begin(); i != found.end(); ++i)
 				{
 					Rect& r = *i;
@@ -431,7 +185,7 @@ void humandetect()
 						crop.push_back(cropped_image);
 						//imagesOfTracking.push_back(cropped_image);
 						crop_coord.push_back(r);	// get cropped image's coordinates
-						tracking_person(crop_coord, frame, imagesOfTracking, true);
+						tracking_person(crop_coord, frame, true);
 					}
 					//}
 						// add cropped image to vector
@@ -439,8 +193,8 @@ void humandetect()
 				}
 			}
 
-			updatedFrame = tracking_person(crop_coord, frame, imagesOfTracking, false);
-			outputVideo.write(drawTrajectory(frame, crop_coord));
+			updatedFrame = tracking_person(crop_coord, frame, false);
+			outputVideo.write(drawTrajectory(frameOriginal, crop_coord));
 			//updatedFrame = tracking_person(crop_coord, frame);
 			// if (ok)	// s-a detectat persoana
 			// {
@@ -476,12 +230,11 @@ void humandetect()
 		// show the window
 		{
 			ostringstream buf;
-			buf << "Mode: " << detector.modeName() << " ||| "
-				<< "FPS: " << fixed << setprecision(1) << (getTickFrequency() / (double)t)
+			buf << "FPS: " << fixed << setprecision(1) << (getTickFrequency() / (double)t)
 				<< "\nFRAME: " << k;
 			putText(frame, buf.str(), Point(10, 30), FONT_HERSHEY_PLAIN, 1.0, Scalar(0, 0, 255), 2, LINE_AA);
 		}
-		imshow("People detector", frame);
+		imshow("People detector", updatedFrame);
 
 		// interact with user
 		const char key = (char)waitKey(1);
@@ -489,10 +242,6 @@ void humandetect()
 		{
 			cout << "Exit requested" << endl;
 			break;
-		}
-		else if (key == 't')
-		{
-			gray_img = !gray_img;
 		}
 	}
 }
